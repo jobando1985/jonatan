@@ -62,6 +62,43 @@ const SFX = {
   ach: () => { tone(660, .1, 'triangle', .07); setTimeout(() => tone(880, .1, 'triangle', .07), 100); setTimeout(() => tone(1320, .18, 'triangle', .07), 200); }
 };
 
+/* ---------- Música procedural ---------- */
+let musicOn = store.get('music', true), nextNote = 0, mstep = 0;
+const vib = p => { try { navigator.vibrate && navigator.vibrate(p); } catch {} };
+function toneAt(t, f, d, type, v, slide = 0) {
+  const o = AC.createOscillator(), g = AC.createGain(); o.type = type; o.frequency.setValueAtTime(f, t);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t + d);
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + d);
+  o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + d + .02);
+}
+function hatAt(t, v) {
+  const n = AC.sampleRate * .04 | 0, b = AC.createBuffer(1, n, AC.sampleRate), a = b.getChannelData(0);
+  for (let i = 0; i < n; i++) a[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const s = AC.createBufferSource(), g = AC.createGain(); g.gain.value = v; s.buffer = b; s.connect(g); g.connect(AC.destination); s.start(t);
+}
+const ROOTS = [55, 43.65, 65.41, 49], BASSP = [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0];
+function musicStep(t, i, live, boss, dur) {
+  const bar = (i >> 4) % 4, s = i & 15, root = ROOTS[bar];
+  if (live) {
+    if (BASSP[s]) toneAt(t, root, dur * 2.2, 'triangle', .07);
+    if (s % 4 === 0) toneAt(t, 130, .12, 'sine', .11, -90);
+    if (s % 2) hatAt(t, boss ? .035 : .022);
+    toneAt(t, root * 4 * [1, 1.189, 1.498, 2][s & 3], dur * 1.4, 'square', .012);
+    if (boss && s % 4 === 2) toneAt(t, root * 8 * [1, 1.189, 1.498][bar % 3], dur * 2, 'sawtooth', .02);
+  } else if (s % 2 === 0) {
+    toneAt(t, root * 4 * [1, 1.498, 1.189, 2][(s >> 1) & 3], dur * 3, 'sine', .03);
+    if (s === 0) toneAt(t, root * 2, dur * 8, 'triangle', .04);
+  }
+}
+function musicTick() {
+  if (!AC || muted || !musicOn || mode === 'paused') { nextNote = 0; return; }
+  const now = AC.currentTime;
+  if (nextNote < now) nextNote = now + .05;
+  const live = mode === 'play' || mode === 'cards', boss = live && enemies.some(e => e.type === 'boss');
+  const bpm = live ? 108 + Math.min(wave, 20) * 3 + (boss ? 22 : 0) : 84, dur = 60 / bpm / 4;
+  while (nextNote < now + .15) { musicStep(nextNote, mstep++, live, boss, dur); nextNote += dur; }
+}
+
 /* ---------- Datos persistentes ---------- */
 const dayKey = d => d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
 let best = store.get('best', 0), totalRuns = store.get('runs', 0);
@@ -152,6 +189,8 @@ let score, lives, wave, spawnLeft, spawnT, waveDelay, combo, comboT, maxCombo, k
 let runGems, runGraze, runBombs, cleanWaves, hurtThisWave, earned, slowT;
 let shake = 0, flash = 0, ts = 1, tsTarget = 1, banner = { t: 0, s: '', sub: '' }, time = 0, overT = 0;
 let newRecord = false, tab = 0, sel = 0, hits = [];
+const newMods = () => ({ dmg: 1, rate: 1, pierce: 0, wide: 0, waveShield: 0, mag: 0, gemx: 0, spd: 0, luck: 0, comb: 0, drone: 0 });
+let mods = newMods(), cardChoices = [], chest = { st: 0, t: 0 }, gemMult = 1;
 const keys = {};
 const pointer = { active: false, x: W / 2, y: H - 100 };
 const BOMB_BTN = { x: W - 58, y: H - 58, r: 34 };
@@ -172,6 +211,14 @@ function startGame() {
   runGems = runGraze = runBombs = cleanWaves = earned = slowT = 0; hurtThisWave = false;
   spawnLeft = 0; spawnT = 0; waveDelay = 40; newRecord = false; ts = tsTarget = 1; shake = 0;
   mode = 'play'; SFX.ui();
+  mods = newMods(); chest = { st: 0, t: 0 }; gemMult = 1;
+  const bo = store.get('boost', null);
+  if (bo) {
+    store.set('boost', null);
+    if (bo.t === 'weapon') { player.lvl = Math.max(player.lvl, 3); toast('🎁 Empezás con arma nivel 3', '#ffe066'); }
+    else if (bo.t === 'kit') { player.shield = 540; bombs += 2; toast('🎁 Escudo + 2 bombas', '#5cf'); }
+    else if (bo.t === 'gemx2') { gemMult = 2; toast('🎁 Gemas x2 esta partida', '#6ff'); }
+  }
   totalRuns++; store.set('runs', totalRuns);
 }
 
@@ -222,6 +269,7 @@ function pickType() {
 }
 function nextWave() {
   wave++; hurtThisWave = false;
+  if (mods.waveShield) player.shield = Math.max(player.shield, 300);
   mission('wave', wave); if (wave >= 10) ach('wave10');
   spawnLeft = Math.min(70, 6 + wave * 3);
   spawnT = 0;
@@ -245,7 +293,7 @@ function killEnemy(e) {
   burst(e.x, e.y, '#fff', boss ? 30 : 4, 3, 16);
   ring(e.x, e.y, e.c, boss ? 220 : 50);
   SFX.boom();
-  kills++; combo++; comboT = 150; maxCombo = Math.max(maxCombo, combo);
+  kills++; combo++; comboT = 150 + 60 * mods.comb; maxCombo = Math.max(maxCombo, combo);
   mission('kills', 1); mission('combo', combo); if (combo >= 20) ach('combo20');
   const pts = e.pts * mult();
   score += pts; pop(e.x, e.y - 10, '+' + pts, e.c, boss);
@@ -255,8 +303,8 @@ function killEnemy(e) {
     ebullets.length = 0;
     tsTarget = .25; ts = .25; shake = 26; flash = 1; say('¡JEFE DERROTADO!', '+' + pts);
     setTimeout(() => tsTarget = 1, 900);
-    mission('boss', 1); ach('boss1'); stats.bosses++;
-  } else if (Math.random() < .14) {
+    mission('boss', 1); ach('boss1'); stats.bosses++; vib([40, 30, 90]);
+  } else if (Math.random() < .14 + .06 * mods.luck) {
     const k = ['W', 'W', 'S', 'B', 'H', 'T', 'L', 'D', 'M'][Math.random() * 9 | 0];
     powers.push({ k, x: e.x, y: e.y, vy: 1.1 });
   }
@@ -265,7 +313,7 @@ function killEnemy(e) {
 
 function useBomb() {
   if (mode !== 'play' || bombs <= 0) return;
-  bombs--; runBombs++; SFX.bomb(); shake = 22; flash = .8;
+  bombs--; runBombs++; SFX.bomb(); vib(90); shake = 22; flash = .8;
   if (runBombs >= 3) ach('bombs3');
   ring(player.x, player.y, '#7df', 700); ring(player.x, player.y, '#fff', 500);
   ebullets.forEach(b => { burst(b.x, b.y, '#ffd', 2, 2, 14); gems.push({ x: b.x, y: b.y, vx: 0, vy: 0, r: 3 }); });
@@ -278,7 +326,7 @@ function hurtPlayer() {
   const p = player;
   if (p.inv > 0) return;
   if (p.shield > 0) { p.shield = 0; p.inv = 70; ring(p.x, p.y, '#5cf', 90); SFX.hurt(); shake = 8; return; }
-  lives--; p.inv = 130; p.lvl = Math.max(1, p.lvl - 1); hurtThisWave = true; cleanWaves = 0;
+  lives--; p.inv = 130; p.lvl = Math.max(1, p.lvl - 1); hurtThisWave = true; cleanWaves = 0; vib(50);
   combo = 0; comboT = 0; shake = 22; flash = .6; SFX.hurt();
   burst(p.x, p.y, ship().c, 30, 6, 40); ring(p.x, p.y, '#fff', 120);
   ebullets.forEach(b => { if (Math.hypot(b.x - p.x, b.y - p.y) < 130) b.dead = true; });
@@ -289,7 +337,7 @@ function gameOver() {
   burst(player.x, player.y, ship().c, 60, 8, 60); ring(player.x, player.y, '#fff', 260);
   tsTarget = .3; ts = .3; setTimeout(() => tsTarget = 1, 900);
   if (score > best) { best = score; newRecord = true; store.set('best', best); }
-  earned = runGems + wave * 3; bank += earned; store.set('bank', bank);
+  earned = (runGems + wave * 3) * gemMult; bank += earned; store.set('bank', bank);
   stats.kills += kills; stats.bestWave = Math.max(stats.bestWave, wave); store.set('stats', stats);
   mission('score', score); if (score >= 50000) ach('score50k');
   if (stats.kills >= 1000) ach('kills1000');
@@ -308,8 +356,10 @@ function fire() {
     [[-15, -.14], [-5, -.04], [5, .04], [15, .14]],
     [[-19, -.22], [-9, -.09], [0, 0], [9, .09], [19, .22]]
   ][L - 1];
-  for (const [ox, a] of pat) bullets.push({ x: p.x + ox, y: p.y - 18, vx: Math.sin(a) * 11, vy: -Math.cos(a) * 11, r: sh.r, dmg: sh.dmg, c: sh.bc });
-  p.cd = Math.max(3, 12 - L + sh.cd); SFX.shoot();
+  const shot = (ox, a) => bullets.push({ x: p.x + ox, y: p.y - 18, vx: Math.sin(a) * 11, vy: -Math.cos(a) * 11, r: sh.r, dmg: sh.dmg * mods.dmg, c: sh.bc, pierce: mods.pierce });
+  for (const [ox, a] of pat) shot(ox, a);
+  for (let k = 1; k <= mods.wide; k++) { shot(-12 * k, -.32 * k); shot(12 * k, .32 * k); }
+  p.cd = Math.max(3, Math.round((12 - L + sh.cd) / mods.rate)); SFX.shoot();
 }
 
 function updatePlayer() {
@@ -317,7 +367,7 @@ function updatePlayer() {
   let ax = 0, ay = 0;
   if (keys.ArrowLeft || keys.a) ax--; if (keys.ArrowRight || keys.d) ax++;
   if (keys.ArrowUp || keys.w) ay--; if (keys.ArrowDown || keys.s) ay++;
-  const sp = 5.4 * sh.spd * (1 + .08 * UPG.vel);
+  const sp = 5.4 * sh.spd * (1 + .08 * UPG.vel) * (1 + .15 * mods.spd);
   if (ax || ay) { const l = Math.hypot(ax, ay); p.x += ax / l * sp; p.y += ay / l * sp; }
   if (pointer.active) { p.x += clamp((pointer.x - p.x) * .28, -sp * 1.8, sp * 1.8); p.y += clamp((pointer.y - 70 - p.y) * .28, -sp * 1.8, sp * 1.8); }
   p.x = clamp(p.x, 18, W - 18); p.y = clamp(p.y, 60, H - 30);
@@ -342,6 +392,7 @@ function step() {
   if (p.drones > 0) p.drones--;
   if (p.magnet > 0) p.magnet--;
   if (slowT > 0) { slowT--; tsTarget = .55; if (slowT === 0) tsTarget = 1; }
+  if (mods.drone) p.drones = Math.max(p.drones, 2);
   updatePlayer();
   if (slowT > 0) updatePlayer(); // compensa la cámara lenta: el jugador conserva su ritmo
 
@@ -364,7 +415,7 @@ function step() {
     else if (waveDelay <= 0) {
       const bonus = wave * 100; score += bonus; pop(W / 2, 200, 'OLA COMPLETADA +' + bonus, '#ffe066', true);
       if (!hurtThisWave) { cleanWaves++; if (cleanWaves >= 3) ach('clean3'); }
-      waveDelay = 100;
+      waveDelay = 100; openCards();
     } else if (--waveDelay === 0) nextWave();
   }
 
@@ -419,9 +470,10 @@ function step() {
   for (const e of enemies) {
     if (e.dead) continue;
     for (const b of bullets) {
-      if (b.dead) continue;
+      if (b.dead || (b.ids && b.ids.includes(e))) continue;
       if (Math.hypot(e.x - b.x, e.y - b.y) < e.r + b.r) {
-        b.dead = true; e.hp -= b.dmg; e.flash = 4; SFX.hit();
+        if (b.pierce > 0) { b.pierce--; (b.ids = b.ids || []).push(e); } else b.dead = true;
+        e.hp -= b.dmg; e.flash = 4; SFX.hit();
         burst(b.x, b.y, '#ffe066', 2, 2, 12);
         if (e.hp <= 0) { killEnemy(e); break; }
       }
@@ -441,12 +493,12 @@ function step() {
   }
 
   // gemas
-  const mag = p.magnet > 0 ? 1e4 : 130 + 20 * UPG.iman;
+  const mag = p.magnet > 0 ? 1e4 : (130 + 20 * UPG.iman) * (1 + .6 * mods.mag);
   for (const g of gems) {
     const d = Math.hypot(p.x - g.x, p.y - g.y);
     if (d < mag) { g.x += (p.x - g.x) / d * 8; g.y += (p.y - g.y) / d * 8; }
     else { g.vy += .06; g.x += g.vx; g.y += g.vy; g.vx *= .97; if (g.vy > 2) g.vy = 2; }
-    if (d < 20) { g.dead = true; score += 5 * mult(); comboT = Math.max(comboT, 60); SFX.gem(); runGems++; mission('gems', 1); }
+    if (d < 20) { g.dead = true; score += 5 * mult(); comboT = Math.max(comboT, 60); SFX.gem(); runGems += mods.gemx ? 2 : 1; mission('gems', 1); }
     if (g.y > H + 20) g.dead = true;
   }
   // power-ups
@@ -483,6 +535,7 @@ function updateFx() {
   for (const r of rings) r.r += (r.max - r.r) * .14 + 1.5;
   rings = rings.filter(r => r.r < r.max - 1);
   if (banner.t > 0) banner.t--;
+  if (chest.st === 1 && ++chest.t >= 75) revealChest();
   if (toasts.length && --toasts[0].t <= 0) toasts.shift();
   shake *= .9; if (shake < .3) shake = 0;
   flash *= .88;
@@ -756,7 +809,8 @@ function draw() {
 
   if (flash > .02) { ctx.fillStyle = `rgba(255,255,255,${flash * .6})`; ctx.fillRect(0, 0, W, H); }
 
-  if (mode === 'play' || mode === 'paused' || mode === 'over') drawHUD();
+  if (mode === 'play' || mode === 'paused' || mode === 'over' || mode === 'cards') drawHUD();
+  if (mode === 'cards') drawCards();
   if (banner.t > 0 && mode === 'play') {
     ctx.globalAlpha = clamp(Math.min(1, banner.t / 30, (150 - banner.t) / 15 + .2), 0, 1);
     txt(banner.s, W / 2, 300, banner.s.length > 12 ? 34 : 44, '#fff', 'center', true);
@@ -784,7 +838,7 @@ function drawHUD() {
     txt('x' + m, W / 2, 62, 22, m >= 5 ? '#ff9f43' : '#ffe066', 'center', true);
     txt(combo + ' combo', W / 2, 80, 12, '#bcd', 'center');
     ctx.fillStyle = '#ffffff22'; ctx.fillRect(W / 2 - 50, 86, 100, 4);
-    ctx.fillStyle = '#ffe066'; ctx.fillRect(W / 2 - 50, 86, 100 * comboT / 150, 4);
+    ctx.fillStyle = '#ffe066'; ctx.fillRect(W / 2 - 50, 86, 100 * Math.min(1, comboT / (150 + 60 * mods.comb)), 4);
   }
   const bs = enemies.find(e => e.type === 'boss');
   if (bs) {
@@ -820,7 +874,7 @@ function drawTitle() {
   button(W / 2 - 110, 470, 220, 46, '🛒 TIENDA  ◆' + bank, () => openMenu(0), { size: 18 });
   const left = daily.list.filter(m => !m.done).length;
   txt('Misiones de hoy: ' + (3 - left) + '/3   ·   Racha: ' + streak.n + ' 🔥', W / 2, 550, 15, left ? '#ffe066' : '#7dff6a', 'center', true);
-  const L = ['Mové: flechas / WASD / arrastrá el dedo', 'Bomba: ESPACIO o botón 💣   ·   Pausa: P   ·   Sonido: M',
+  const L = ['Mové: flechas / WASD / arrastrá el dedo', 'Bomba: ESPACIO o 💣  ·  Pausa: P  ·  Sonido: M  ·  Música: N',
     'W arma · S escudo · B bomba · H vida', 'T lento · L láser · D drones · M imán'];
   L.forEach((s, i) => txt(s, W / 2, 590 + i * 22, 13, '#9bb', 'center'));
 }
@@ -829,21 +883,87 @@ function drawOver() {
   const a = Math.min(1, overT / 40);
   ctx.fillStyle = `rgba(0,0,0,${.7 * a})`; ctx.fillRect(0, 0, W, H);
   if (overT < 30) return;
-  txt('GAME OVER', W / 2, 200, 48, '#ff5c7a', 'center', true);
-  txt(String(score), W / 2, 255, 40, '#fff', 'center', true);
-  if (newRecord) txt('¡NUEVO RÉCORD!', W / 2, 290, 22, '#ffe066', 'center', true);
-  else txt('Récord: ' + best, W / 2, 290, 18, '#9bb', 'center');
-  txt(`Ola ${wave}  ·  ${kills} enemigos  ·  combo máx. ${maxCombo}`, W / 2, 325, 15, '#cde', 'center');
-  txt('+' + earned + ' ◆ ganadas  (total ' + bank + ')', W / 2, 360, 20, '#6ff', 'center', true);
+  txt('GAME OVER', W / 2, 190, 48, '#ff5c7a', 'center', true);
+  txt(String(score), W / 2, 245, 40, '#fff', 'center', true);
+  if (newRecord) txt('¡NUEVO RÉCORD!', W / 2, 280, 22, '#ffe066', 'center', true);
+  else txt('Récord: ' + best, W / 2, 280, 18, '#9bb', 'center');
+  txt(`Ola ${wave}  ·  ${kills} enemigos  ·  combo máx. ${maxCombo}`, W / 2, 312, 15, '#cde', 'center');
+  txt('+' + earned + ' ◆ ganadas  (total ' + bank + ')', W / 2, 344, 20, '#6ff', 'center', true);
   if (overT > 50) {
-    button(W / 2 - 120, 400, 240, 54, '↻  REINTENTAR', startGame, { bg: '#0d4a2a', border: '#7dff6a', size: 22 });
-    button(W / 2 - 120, 468, 240, 46, '🛒 TIENDA', () => openMenu(0), { size: 18 });
-    button(W / 2 - 120, 526, 240, 40, '📋 Copiar puntaje', shareScore, { size: 15, border: '#888' });
+    if (chest.st === 0) button(W / 2 - 120, 366, 240, 58, '🎁 ABRIR COFRE SORPRESA', openChest, { bg: '#4a3a0a', border: '#ffe066', size: 17 });
+    else {
+      ctx.fillStyle = '#4a3a0a'; rr(W / 2 - 120, 366, 240, 58); ctx.fill();
+      ctx.strokeStyle = '#ffe066'; ctx.lineWidth = 3; rr(W / 2 - 120, 366, 240, 58); ctx.stroke();
+      if (chest.st === 1) txt(['💎', '💰', '🔫', '🛡️', '⚡'][(chest.t >> 2) % 5], W / 2, 406, 34, '#fff', 'center');
+      else txt(chest.rw.ic + ' ' + chest.rw.txt, W / 2, 400, 14, '#ffe066', 'center', true);
+    }
+    button(W / 2 - 120, 436, 240, 54, '↻  REINTENTAR', startGame, { bg: '#0d4a2a', border: '#7dff6a', size: 22 });
+    button(W / 2 - 120, 500, 240, 44, '🛒 TIENDA', () => openMenu(0), { size: 18 });
+    button(W / 2 - 120, 554, 240, 38, '📋 Copiar puntaje', shareScore, { size: 15, border: '#888' });
   }
 }
 function shareScore() {
   const s = `Space Shooter: ${score} puntos, ola ${wave}, combo máx. ${maxCombo}. ¿Me superás?`;
   try { navigator.clipboard.writeText(s); toast('Puntaje copiado'); } catch { toast(s); }
+}
+
+/* ---------- Mejoras entre olas ---------- */
+const CARDS = [
+  { n: 'Munición pesada', d: '+25% de daño', ic: '💥', c: '#ff9f43', ok: () => mods.dmg < 3, fn: () => mods.dmg *= 1.25 },
+  { n: 'Cadencia', d: '+18% de velocidad de disparo', ic: '⚡', c: '#ffe066', ok: () => mods.rate < 2, fn: () => mods.rate *= 1.18 },
+  { n: 'Perforante', d: 'Las balas atraviesan +1 enemigo', ic: '🔱', c: '#b388ff', ok: () => mods.pierce < 3, fn: () => mods.pierce++ },
+  { n: 'Disparo lateral', d: '+2 balas en diagonal', ic: '🔀', c: '#7dff6a', ok: () => mods.wide < 2, fn: () => mods.wide++ },
+  { n: 'Reparación', d: '+1 vida', ic: '❤️', c: '#ff5c7a', ok: () => lives < 6, fn: () => { lives++; } },
+  { n: 'Arsenal', d: '+1 bomba', ic: '💣', c: '#ff9f43', ok: () => bombs < 6, fn: () => { bombs++; } },
+  { n: 'Escudo de ola', d: 'Empezás cada ola con escudo', ic: '🛡️', c: '#5cf', ok: () => !mods.waveShield, fn: () => mods.waveShield = 1 },
+  { n: 'Súper imán', d: 'Las gemas te vienen de más lejos', ic: '🧲', c: '#6ff', ok: () => mods.mag < 3, fn: () => mods.mag++ },
+  { n: 'Minero', d: 'Las gemas de la tienda valen doble', ic: '💎', c: '#6ff', ok: () => !mods.gemx, fn: () => mods.gemx = 1 },
+  { n: 'Turbo', d: '+15% de velocidad de la nave', ic: '🚀', c: '#4fd1ff', ok: () => mods.spd < 3, fn: () => mods.spd++ },
+  { n: 'Suerte', d: 'Caen más power-ups', ic: '🍀', c: '#7dff6a', ok: () => mods.luck < 3, fn: () => mods.luck++ },
+  { n: 'Concentración', d: 'El combo dura más tiempo', ic: '🔥', c: '#ff9f43', ok: () => mods.comb < 3, fn: () => mods.comb++ },
+  { n: 'Escolta', d: 'Dos drones te acompañan siempre', ic: '🛸', c: '#7dff6a', ok: () => !mods.drone, fn: () => mods.drone = 1 }
+];
+function openCards() {
+  const pool = CARDS.filter(cd => cd.ok());
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  cardChoices = pool.slice(0, 3);
+  if (!cardChoices.length) return;
+  mode = 'cards'; pointer.active = false; SFX.wave();
+}
+function pickCard(i) {
+  const cd = cardChoices[i]; if (!cd || mode !== 'cards') return;
+  cd.fn(); mode = 'play'; waveDelay = 50; SFX.power(); toast(cd.ic + ' ' + cd.n, cd.c);
+}
+function drawCards() {
+  ctx.fillStyle = '#000b'; ctx.fillRect(0, 0, W, H);
+  txt('¡OLA ' + wave + ' SUPERADA!', W / 2, 120, 30, '#ffe066', 'center', true);
+  txt('Elegí una mejora para esta partida', W / 2, 150, 16, '#cde', 'center');
+  cardChoices.forEach((cd, i) => {
+    const y = 185 + i * 140;
+    hits.push({ x: 24, y, w: W - 48, h: 124, fn: () => pickCard(i) });
+    ctx.fillStyle = '#121c33'; rr(24, y, W - 48, 124, 14); ctx.fill();
+    ctx.strokeStyle = cd.c; ctx.lineWidth = 3; rr(24, y, W - 48, 124, 14); ctx.stroke();
+    txt(cd.ic, 72, y + 76, 44, '#fff', 'center');
+    txt(cd.n, 118, y + 50, 24, '#fff', 'left', true);
+    txt(cd.d, 118, y + 80, 15, '#bcd');
+    txt('[' + (i + 1) + ']', W - 44, y + 30, 14, '#89a', 'right', true);
+  });
+}
+
+/* ---------- Cofre sorpresa ---------- */
+function rollReward() {
+  const r = Math.random(), n = (lo, hi) => lo + (Math.random() * (hi - lo + 1) | 0);
+  if (r < .40) { const g = n(20, 60); return { ic: '💎', txt: '+' + g + ' ◆', fn: () => { bank += g; } }; }
+  if (r < .60) { const g = n(80, 150); return { ic: '💰', txt: '+' + g + ' ◆', fn: () => { bank += g; } }; }
+  if (r < .75) return { ic: '🔫', txt: 'Próxima: arma nivel 3', fn: () => store.set('boost', { t: 'weapon' }) };
+  if (r < .90) return { ic: '🛡️', txt: 'Próxima: escudo + 2 bombas', fn: () => store.set('boost', { t: 'kit' }) };
+  if (r < .98) return { ic: '💎', txt: 'Próxima: gemas x2', fn: () => store.set('boost', { t: 'gemx2' }) };
+  const g = n(300, 500); return { ic: '🎰', txt: '¡JACKPOT! +' + g + ' ◆', fn: () => { bank += g; } };
+}
+function openChest() { if (chest.st || mode !== 'over') return; chest.st = 1; chest.t = 0; chest.rw = rollReward(); SFX.buy(); }
+function revealChest() {
+  chest.st = 2; chest.rw.fn(); store.set('bank', bank); SFX.ach(); vib(60);
+  burst(W / 2, 395, '#ffe066', 30, 6, 40); ring(W / 2, 395, '#ffe066', 140);
 }
 
 /* ---------- Tienda ---------- */
@@ -940,8 +1060,10 @@ addEventListener('keydown', e => {
   keys[k] = true;
   if ([' ', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) e.preventDefault();
   if (k === 'm') { muted = !muted; store.set('muted', muted); }
+  if (k === 'n') { musicOn = !musicOn; store.set('music', musicOn); toast(musicOn ? '🎵 Música activada' : '🎵 Música apagada'); }
+  if (mode === 'cards' && ['1', '2', '3'].includes(k)) pickCard(+k - 1);
   if (mode === 'title') { if (k === 'Enter' || k === ' ') startGame(); else if (k === 't') openMenu(0); }
-  else if (mode === 'over') { if (overT > 50) { if (k === 'Enter' || k === ' ') startGame(); else if (k === 't') openMenu(0); } }
+  else if (mode === 'over') { if (overT > 50) { if (k === 'Enter' || k === ' ') startGame(); else if (k === 't') openMenu(0); else if (k === 'c') openChest(); } }
   else if (mode === 'menu') {
     if (k === 'ArrowRight') { tab = (tab + 1) % TABS.length; sel = 0; SFX.ui(); }
     else if (k === 'ArrowLeft') { tab = (tab + TABS.length - 1) % TABS.length; sel = 0; SFX.ui(); }
@@ -961,11 +1083,11 @@ function toGame(e) { const r = c.getBoundingClientRect(); return { x: (e.clientX
 c.addEventListener('pointerdown', e => {
   initAudio(); c.setPointerCapture(e.pointerId);
   const p = toGame(e);
-  if (mode === 'title' || mode === 'menu' || mode === 'over') {
+  if (mode === 'title' || mode === 'menu' || mode === 'over' || mode === 'cards') {
     const h = hits.find(h => p.x >= h.x && p.x <= h.x + h.w && p.y >= h.y && p.y <= h.y + h.h);
     if (h) return h.fn();
     if (mode === 'title') return startGame();
-    if (mode === 'over' && overT > 50) return startGame();
+    if (mode === 'over' && overT > 50 && chest.st !== 1) return startGame();
     return;
   }
   if (mode === 'paused') { mode = 'play'; return; }
@@ -986,6 +1108,7 @@ function frame(now) {
     while (acc >= 1 && n++ < 5) { step(); acc--; }
     if (n >= 5) acc = 0;
   }
+  musicTick();
   draw();
   requestAnimationFrame(frame);
 }
