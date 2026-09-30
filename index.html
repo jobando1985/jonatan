@@ -21,17 +21,21 @@ const R = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const store = {
   get(k, d) { try { const v = JSON.parse(localStorage.getItem('ss_' + k)); return v ?? d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem('ss_' + k, JSON.stringify(v)); } catch {} }
+  set(k, v) {
+    const j = JSON.stringify(v);
+    try { localStorage.setItem('ss_' + k, j); } catch {}
+    try { if (CG.ready) CG.sdk().data.setItem('ss_' + k, j); } catch {}
+  }
 };
 
 /* ---------- Audio (sintetizado, sin archivos) ---------- */
-let AC = null, muted = store.get('muted', false), shootTick = 0, adPause = false;
+let AC = null, muted = store.get('muted', false), shootTick = 0, adPause = false, sdkMute = false;
 function initAudio() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
 }
 function tone(f, d, type = 'square', v = .06, slide = 0) {
-  if (!AC || muted || adPause) return;
+  if (!AC || muted || adPause || sdkMute) return;
   const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
   o.type = type; o.frequency.setValueAtTime(f, t);
   if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t + d);
@@ -39,7 +43,7 @@ function tone(f, d, type = 'square', v = .06, slide = 0) {
   o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + d);
 }
 function noise(d, v = .15) {
-  if (!AC || muted || adPause) return;
+  if (!AC || muted || adPause || sdkMute) return;
   const n = AC.sampleRate * d | 0, b = AC.createBuffer(1, n, AC.sampleRate), a = b.getChannelData(0);
   for (let i = 0; i < n; i++) a[i] = (Math.random() * 2 - 1) * (1 - i / n);
   const s = AC.createBufferSource(), g = AC.createGain();
@@ -92,7 +96,7 @@ function musicStep(t, i, live, boss, dur) {
   }
 }
 function musicTick() {
-  if (!AC || muted || adPause || !musicOn || mode === 'paused') { nextNote = 0; return; }
+  if (!AC || muted || adPause || sdkMute || !musicOn || mode === 'paused') { nextNote = 0; return; }
   const now = AC.currentTime;
   if (nextNote < now) nextNote = now + .05;
   const live = mode === 'play' || mode === 'cards', boss = live && enemies.some(e => e.type === 'boss');
@@ -104,7 +108,14 @@ function musicTick() {
 const CG = {
   ready: false, playing: false, lastAd: 0,
   sdk() { return window.CrazyGames && window.CrazyGames.SDK; },
-  async init() { try { const s = this.sdk(); if (s) { await s.init(); this.ready = true; } } catch { this.ready = false; } },
+  async init() {
+    try {
+      const s = this.sdk(); if (!s) return;
+      await s.init(); this.ready = true;
+      try { sdkMute = !!s.game.settings.muteAudio; s.game.addSettingsChangeListener(cfg => { sdkMute = !!(cfg && cfg.muteAudio); }); } catch {}
+      syncCloud();
+    } catch { this.ready = false; }
+  },
   sync() {
     if (!this.ready) return;
     const want = mode === 'play';
@@ -189,8 +200,7 @@ function makeDaily(key) {
   return { key, list };
 }
 const today = dayKey(new Date());
-let daily = store.get('daily', null);
-if (!daily || daily.key !== today) { daily = makeDaily(today); store.set('daily', daily); }
+let daily = store.get('daily', null), streak = store.get('streak', { last: '', n: 0 }), streakToast = false;
 function mission(stat, val) {
   for (const m of daily.list) {
     if (m.stat !== stat || m.done) continue;
@@ -198,13 +208,35 @@ function mission(stat, val) {
     if (m.prog >= m.target) { m.prog = m.target; m.done = true; bank += 100; store.set('bank', bank); toast('✔ Misión: ' + m.text + '  +100◆', '#7dff6a'); SFX.ach(); }
   }
 }
-// racha diaria
-let streak = store.get('streak', { last: '', n: 0 });
-if (streak.last !== today) {
-  const y = dayKey(new Date(Date.now() - 864e5));
-  streak.n = streak.last === y ? streak.n + 1 : 1; streak.last = today;
-  const bonus = 25 * Math.min(streak.n, 7); bank += bonus; store.set('bank', bank); store.set('streak', streak);
-  setTimeout(() => toast('🔥 Racha de ' + streak.n + ' día(s)  +' + bonus + '◆', '#ff9f43'), 600);
+// racha diaria y misiones del día (se re-ejecuta al cargar datos de la nube)
+function ensureDay() {
+  if (!daily || daily.key !== today) { daily = makeDaily(today); store.set('daily', daily); }
+  if (streak.last !== today) {
+    const y = dayKey(new Date(Date.now() - 864e5));
+    streak.n = streak.last === y ? streak.n + 1 : 1; streak.last = today;
+    const bonus = 25 * Math.min(streak.n, 7); bank += bonus; store.set('bank', bank); store.set('streak', streak);
+    if (!streakToast) { streakToast = true; setTimeout(() => toast('🔥 Racha de ' + streak.n + ' día(s)  +' + bonus + '◆', '#ff9f43'), 600); }
+  }
+}
+ensureDay();
+const SAVE_KEYS = ['best', 'runs', 'bank', 'up', 'ship', 'ach', 'stats', 'top', 'daily', 'streak', 'muted', 'music', 'boost'];
+function loadSaved() {
+  best = store.get('best', 0); totalRuns = store.get('runs', 0); bank = store.get('bank', 0);
+  UPG = Object.assign({ life: 0, vel: 0, iman: 0, arma: 0, bomb: 0 }, store.get('up', {}));
+  shipSel = store.get('ship', 'nova'); achDone = store.get('ach', {});
+  stats = Object.assign({ kills: 0, bestWave: 0, bosses: 0 }, store.get('stats', {}));
+  topRuns = store.get('top', []); muted = store.get('muted', false); musicOn = store.get('music', true);
+  daily = store.get('daily', null); streak = store.get('streak', { last: '', n: 0 });
+  ensureDay();
+}
+// Data Module de CrazyGames: la nube gana si ya hay datos; si no, se sube lo local.
+function syncCloud() {
+  try {
+    const d = CG.sdk().data; let any = false;
+    for (const k of SAVE_KEYS) { const v = d.getItem('ss_' + k); if (v !== null && v !== undefined) { try { localStorage.setItem('ss_' + k, v); } catch {} any = true; } }
+    if (any) loadSaved();
+    else for (const k of SAVE_KEYS) { let v = null; try { v = localStorage.getItem('ss_' + k); } catch {} if (v !== null) d.setItem('ss_' + k, v); }
+  } catch {}
 }
 
 /* ---------- Estado de juego ---------- */
