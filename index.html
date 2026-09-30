@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>Space Shooter</title>
+<title>Galaxy Rush</title>
 <style>
   html,body{margin:0;height:100%;background:#03040c;color:#fff;font-family:system-ui,sans-serif;overflow:hidden;overscroll-behavior:none}
   body{display:flex;align-items:center;justify-content:center}
@@ -934,8 +934,8 @@ function drawHUD() {
 function drawTitle() {
   ctx.fillStyle = '#0006'; ctx.fillRect(0, 0, W, H);
   ctx.save(); ctx.translate(0, Math.sin(time * .04) * 6);
-  txt('SPACE', W / 2, 190, 68, '#4fd1ff', 'center', true);
-  txt('SHOOTER', W / 2, 255, 68, '#ff5c7a', 'center', true);
+  txt('GALAXY', W / 2, 190, 68, '#4fd1ff', 'center', true);
+  txt('RUSH', W / 2, 255, 68, '#ff5c7a', 'center', true);
   ctx.restore();
   drawShipAt(W / 2, 318 + Math.sin(time * .05) * 5, ship(), 1.5);
   if (best > 0) txt('Récord: ' + best, W / 2, 375, 18, '#ffe066', 'center', true);
@@ -978,7 +978,7 @@ function retry() {
   else startGame();
 }
 function shareScore() {
-  const s = `Space Shooter: ${score} puntos, ola ${wave}, combo máx. ${maxCombo}. ¿Me superás?`;
+  const s = `Galaxy Rush: ${score} puntos, ola ${wave}, combo máx. ${maxCombo}. ¿Me superás?`;
   try { navigator.clipboard.writeText(s); toast('Puntaje copiado'); } catch { toast(s); }
 }
 
