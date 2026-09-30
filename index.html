@@ -9,6 +9,7 @@
   body{display:flex;align-items:center;justify-content:center}
   canvas{max-width:100vw;max-height:100vh;height:100vh;aspect-ratio:2/3;touch-action:none;user-select:none;-webkit-user-select:none;display:block}
 </style>
+<script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
 </head>
 <body>
 <canvas id="c" width="480" height="720"></canvas>
@@ -24,13 +25,13 @@ const store = {
 };
 
 /* ---------- Audio (sintetizado, sin archivos) ---------- */
-let AC = null, muted = store.get('muted', false), shootTick = 0;
+let AC = null, muted = store.get('muted', false), shootTick = 0, adPause = false;
 function initAudio() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
 }
 function tone(f, d, type = 'square', v = .06, slide = 0) {
-  if (!AC || muted) return;
+  if (!AC || muted || adPause) return;
   const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
   o.type = type; o.frequency.setValueAtTime(f, t);
   if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t + d);
@@ -38,7 +39,7 @@ function tone(f, d, type = 'square', v = .06, slide = 0) {
   o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + d);
 }
 function noise(d, v = .15) {
-  if (!AC || muted) return;
+  if (!AC || muted || adPause) return;
   const n = AC.sampleRate * d | 0, b = AC.createBuffer(1, n, AC.sampleRate), a = b.getChannelData(0);
   for (let i = 0; i < n; i++) a[i] = (Math.random() * 2 - 1) * (1 - i / n);
   const s = AC.createBufferSource(), g = AC.createGain();
@@ -91,12 +92,36 @@ function musicStep(t, i, live, boss, dur) {
   }
 }
 function musicTick() {
-  if (!AC || muted || !musicOn || mode === 'paused') { nextNote = 0; return; }
+  if (!AC || muted || adPause || !musicOn || mode === 'paused') { nextNote = 0; return; }
   const now = AC.currentTime;
   if (nextNote < now) nextNote = now + .05;
   const live = mode === 'play' || mode === 'cards', boss = live && enemies.some(e => e.type === 'boss');
   const bpm = live ? 108 + Math.min(wave, 20) * 3 + (boss ? 22 : 0) : 84, dur = 60 / bpm / 4;
   while (nextNote < now + .15) { musicStep(nextNote, mstep++, live, boss, dur); nextNote += dur; }
+}
+
+/* ---------- CrazyGames SDK (seguro si el SDK no está) ---------- */
+const CG = {
+  ready: false, playing: false, lastAd: 0,
+  sdk() { return window.CrazyGames && window.CrazyGames.SDK; },
+  async init() { try { const s = this.sdk(); if (s) { await s.init(); this.ready = true; } } catch { this.ready = false; } },
+  sync() {
+    if (!this.ready) return;
+    const want = mode === 'play';
+    if (want === this.playing) return;
+    this.playing = want;
+    try { want ? this.sdk().game.gameplayStart() : this.sdk().game.gameplayStop(); } catch {}
+  },
+  happy() { try { this.ready && this.sdk().game.happytime(); } catch {} }
+};
+// type: 'midgame' | 'rewarded'. onDone(ok): ok=false si no hubo anuncio o falló.
+function showAd(type, onDone) {
+  if (!CG.ready) return onDone(false);
+  const prev = mode; let settled = false;
+  mode = 'ad'; adPause = true;
+  const fin = ok => { if (settled) return; settled = true; adPause = false; mode = prev; onDone(ok); };
+  try { CG.sdk().ad.requestAd(type, { adStarted: () => {}, adFinished: () => fin(true), adError: () => fin(false) }); } catch { fin(false); }
+  setTimeout(() => fin(false), 120000);
 }
 
 /* ---------- Datos persistentes ---------- */
@@ -190,7 +215,7 @@ let runGems, runGraze, runBombs, cleanWaves, hurtThisWave, earned, slowT;
 let shake = 0, flash = 0, ts = 1, tsTarget = 1, banner = { t: 0, s: '', sub: '' }, time = 0, overT = 0;
 let newRecord = false, tab = 0, sel = 0, hits = [];
 const newMods = () => ({ dmg: 1, rate: 1, pierce: 0, wide: 0, waveShield: 0, mag: 0, gemx: 0, spd: 0, luck: 0, comb: 0, drone: 0 });
-let mods = newMods(), cardChoices = [], chest = { st: 0, t: 0 }, gemMult = 1;
+let mods = newMods(), cardChoices = [], chest = { st: 0, t: 0 }, gemMult = 1, revived = false, reviveT = 0;
 const keys = {};
 const pointer = { active: false, x: W / 2, y: H - 100 };
 const BOMB_BTN = { x: W - 58, y: H - 58, r: 34 };
@@ -211,7 +236,7 @@ function startGame() {
   runGems = runGraze = runBombs = cleanWaves = earned = slowT = 0; hurtThisWave = false;
   spawnLeft = 0; spawnT = 0; waveDelay = 40; newRecord = false; ts = tsTarget = 1; shake = 0;
   mode = 'play'; SFX.ui();
-  mods = newMods(); chest = { st: 0, t: 0 }; gemMult = 1;
+  mods = newMods(); chest = { st: 0, t: 0 }; gemMult = 1; revived = false;
   const bo = store.get('boost', null);
   if (bo) {
     store.set('boost', null);
@@ -303,7 +328,7 @@ function killEnemy(e) {
     ebullets.length = 0;
     tsTarget = .25; ts = .25; shake = 26; flash = 1; say('¡JEFE DERROTADO!', '+' + pts);
     setTimeout(() => tsTarget = 1, 900);
-    mission('boss', 1); ach('boss1'); stats.bosses++; vib([40, 30, 90]);
+    mission('boss', 1); ach('boss1'); stats.bosses++; vib([40, 30, 90]); CG.happy();
   } else if (Math.random() < .14 + .06 * mods.luck) {
     const k = ['W', 'W', 'S', 'B', 'H', 'T', 'L', 'D', 'M'][Math.random() * 9 | 0];
     powers.push({ k, x: e.x, y: e.y, vy: 1.1 });
@@ -330,13 +355,22 @@ function hurtPlayer() {
   combo = 0; comboT = 0; shake = 22; flash = .6; SFX.hurt();
   burst(p.x, p.y, ship().c, 30, 6, 40); ring(p.x, p.y, '#fff', 120);
   ebullets.forEach(b => { if (Math.hypot(b.x - p.x, b.y - p.y) < 130) b.dead = true; });
-  if (lives <= 0) gameOver();
+  if (lives <= 0) { if (CG.ready && !revived) offerRevive(); else gameOver(); }
+}
+function offerRevive() { mode = 'revive'; reviveT = 360; pointer.active = false; }
+function acceptRevive() {
+  if (mode !== 'revive') return;
+  showAd('rewarded', ok => {
+    if (!ok) return gameOver();
+    revived = true; lives = 2; player.inv = 200; player.shield = 300; ebullets.length = 0;
+    mode = 'play'; SFX.power(); toast('❤️ ¡Revivido!', '#ff5c7a'); CG.happy();
+  });
 }
 function gameOver() {
   mode = 'over'; overT = 0; SFX.over();
   burst(player.x, player.y, ship().c, 60, 8, 60); ring(player.x, player.y, '#fff', 260);
   tsTarget = .3; ts = .3; setTimeout(() => tsTarget = 1, 900);
-  if (score > best) { best = score; newRecord = true; store.set('best', best); }
+  if (score > best) { best = score; newRecord = true; store.set('best', best); CG.happy(); }
   earned = (runGems + wave * 3) * gemMult; bank += earned; store.set('bank', bank);
   stats.kills += kills; stats.bestWave = Math.max(stats.bestWave, wave); store.set('stats', stats);
   mission('score', score); if (score >= 50000) ach('score50k');
@@ -382,6 +416,7 @@ function step() {
   time++;
   for (const s of stars) { s.y += s.v * (mode === 'play' ? 1 + Math.min(2, wave * .05) : 1); if (s.y > H) { s.y = -2; s.x = R(0, W); } }
   updateFx();
+  if (mode === 'revive') { if (--reviveT <= 0) gameOver(); return; }
   if (mode === 'over') { overT++; return; }
   if (mode !== 'play') return;
 
@@ -809,8 +844,10 @@ function draw() {
 
   if (flash > .02) { ctx.fillStyle = `rgba(255,255,255,${flash * .6})`; ctx.fillRect(0, 0, W, H); }
 
-  if (mode === 'play' || mode === 'paused' || mode === 'over' || mode === 'cards') drawHUD();
+  if (mode === 'play' || mode === 'paused' || mode === 'over' || mode === 'cards' || mode === 'revive') drawHUD();
   if (mode === 'cards') drawCards();
+  if (mode === 'revive') drawRevive();
+  if (mode === 'ad') { ctx.fillStyle = '#000c'; ctx.fillRect(0, 0, W, H); txt('Cargando anuncio…', W / 2, H / 2, 20, '#fff', 'center', true); }
   if (banner.t > 0 && mode === 'play') {
     ctx.globalAlpha = clamp(Math.min(1, banner.t / 30, (150 - banner.t) / 15 + .2), 0, 1);
     txt(banner.s, W / 2, 300, banner.s.length > 12 ? 34 : 44, '#fff', 'center', true);
@@ -897,14 +934,30 @@ function drawOver() {
       if (chest.st === 1) txt(['💎', '💰', '🔫', '🛡️', '⚡'][(chest.t >> 2) % 5], W / 2, 406, 34, '#fff', 'center');
       else txt(chest.rw.ic + ' ' + chest.rw.txt, W / 2, 400, 14, '#ffe066', 'center', true);
     }
-    button(W / 2 - 120, 436, 240, 54, '↻  REINTENTAR', startGame, { bg: '#0d4a2a', border: '#7dff6a', size: 22 });
+    button(W / 2 - 120, 436, 240, 54, '↻  REINTENTAR', retry, { bg: '#0d4a2a', border: '#7dff6a', size: 22 });
     button(W / 2 - 120, 500, 240, 44, '🛒 TIENDA', () => openMenu(0), { size: 18 });
     button(W / 2 - 120, 554, 240, 38, '📋 Copiar puntaje', shareScore, { size: 15, border: '#888' });
+    if (CG.ready && chest.st === 2 && !chest.again) button(W / 2 - 120, 600, 240, 38, '▶ Otro cofre (ver anuncio)', () => showAd('rewarded', ok => { if (ok) { chest = { st: 0, t: 0, again: true }; openChest(); } }), { size: 14, border: '#ffe066' });
   }
+}
+function retry() {
+  const now = Date.now();
+  if (CG.ready && now - CG.lastAd > 60000) { CG.lastAd = now; showAd('midgame', () => startGame()); }
+  else startGame();
 }
 function shareScore() {
   const s = `Space Shooter: ${score} puntos, ola ${wave}, combo máx. ${maxCombo}. ¿Me superás?`;
   try { navigator.clipboard.writeText(s); toast('Puntaje copiado'); } catch { toast(s); }
+}
+
+function drawRevive() {
+  ctx.fillStyle = '#000b'; ctx.fillRect(0, 0, W, H);
+  txt('¡CASI!', W / 2, 220, 56, '#ff5c7a', 'center', true);
+  txt('¿Seguís jugando?', W / 2, 262, 20, '#cde', 'center');
+  button(W / 2 - 130, 300, 260, 64, '▶ REVIVIR (ver anuncio)', acceptRevive, { bg: '#0d4a2a', border: '#7dff6a', size: 19 });
+  button(W / 2 - 130, 380, 260, 48, 'No, gracias', gameOver, { size: 16, border: '#888' });
+  ctx.fillStyle = '#ffffff22'; ctx.fillRect(W / 2 - 130, 450, 260, 6);
+  ctx.fillStyle = '#7dff6a'; ctx.fillRect(W / 2 - 130, 450, 260 * reviveT / 360, 6);
 }
 
 /* ---------- Mejoras entre olas ---------- */
@@ -1062,8 +1115,9 @@ addEventListener('keydown', e => {
   if (k === 'm') { muted = !muted; store.set('muted', muted); }
   if (k === 'n') { musicOn = !musicOn; store.set('music', musicOn); toast(musicOn ? '🎵 Música activada' : '🎵 Música apagada'); }
   if (mode === 'cards' && ['1', '2', '3'].includes(k)) pickCard(+k - 1);
+  if (mode === 'revive') { if (k === 'Enter') acceptRevive(); else if (k === 'Escape') gameOver(); }
   if (mode === 'title') { if (k === 'Enter' || k === ' ') startGame(); else if (k === 't') openMenu(0); }
-  else if (mode === 'over') { if (overT > 50) { if (k === 'Enter' || k === ' ') startGame(); else if (k === 't') openMenu(0); else if (k === 'c') openChest(); } }
+  else if (mode === 'over') { if (overT > 50) { if (k === 'Enter' || k === ' ') retry(); else if (k === 't') openMenu(0); else if (k === 'c') openChest(); } }
   else if (mode === 'menu') {
     if (k === 'ArrowRight') { tab = (tab + 1) % TABS.length; sel = 0; SFX.ui(); }
     else if (k === 'ArrowLeft') { tab = (tab + TABS.length - 1) % TABS.length; sel = 0; SFX.ui(); }
@@ -1083,11 +1137,12 @@ function toGame(e) { const r = c.getBoundingClientRect(); return { x: (e.clientX
 c.addEventListener('pointerdown', e => {
   initAudio(); c.setPointerCapture(e.pointerId);
   const p = toGame(e);
-  if (mode === 'title' || mode === 'menu' || mode === 'over' || mode === 'cards') {
+  if (mode === 'ad') return;
+  if (mode === 'title' || mode === 'menu' || mode === 'over' || mode === 'cards' || mode === 'revive') {
     const h = hits.find(h => p.x >= h.x && p.x <= h.x + h.w && p.y >= h.y && p.y <= h.y + h.h);
     if (h) return h.fn();
     if (mode === 'title') return startGame();
-    if (mode === 'over' && overT > 50 && chest.st !== 1) return startGame();
+    if (mode === 'over' && overT > 50 && chest.st !== 1) return retry();
     return;
   }
   if (mode === 'paused') { mode = 'play'; return; }
@@ -1108,11 +1163,12 @@ function frame(now) {
     while (acc >= 1 && n++ < 5) { step(); acc--; }
     if (n >= 5) acc = 0;
   }
-  musicTick();
+  musicTick(); CG.sync();
   draw();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+CG.init();
 
 // ganchos de depuración: agregar #debug a la URL
 if (location.hash === '#debug') {
