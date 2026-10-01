@@ -7,7 +7,8 @@
 <style>
   html,body{margin:0;height:100%;background:#03040c;color:#fff;font-family:system-ui,sans-serif;overflow:hidden;overscroll-behavior:none}
   body{display:flex;align-items:center;justify-content:center}
-  canvas{max-width:100vw;max-height:100vh;height:100vh;aspect-ratio:2/3;touch-action:none;user-select:none;-webkit-user-select:none;display:block}
+  body{background:radial-gradient(ellipse at 50% 40%,#1b0f3a 0%,#080a1c 55%,#03040c 100%)}
+  canvas{touch-action:none;user-select:none;-webkit-user-select:none;display:block}
 </style>
 <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
 </head>
@@ -27,6 +28,73 @@ const store = {
     try { if (CG.ready) CG.sdk().data.setItem('ss_' + k, j); } catch {}
   }
 };
+
+/* ---------- Idioma (EN por defecto, ES si el navegador está en español) ---------- */
+const nlang = (navigator.language || 'en').toLowerCase();
+let lang = store.get('lang', nlang.startsWith('es') ? 'es' : 'en');
+const LT = (en, es) => (lang === 'es' ? es : en);
+const EN = {
+  'Vidas extra': 'Extra lives', '+1 vida al empezar': '+1 life at start', 'Motores': 'Engines', '+8% de velocidad': '+8% speed',
+  'Imán de gemas': 'Gem magnet', '+20 de alcance': '+20 range', 'Arma inicial': 'Starting weapon', '+1 nivel de arma al empezar': '+1 weapon level at start',
+  'Bombas': 'Bombs', '+1 bomba al empezar': '+1 bomb at start',
+  'Equilibrada': 'Balanced', 'Víbora': 'Viper', 'Muy veloz, disparo ligero': 'Very fast, light shots', 'Titán': 'Titan',
+  'Lenta y letal · +1 vida': 'Slow and deadly · +1 life', 'Fénix': 'Phoenix', 'Ráfaga altísima': 'Very high fire rate',
+  'Llegá a la ola 5': 'Reach wave 5', 'Llegá a la ola 10': 'Reach wave 10', 'Destruí 500 enemigos': 'Destroy 500 enemies',
+  'Cazajefes': 'Boss Hunter', 'Derrotá a tu primer jefe': 'Defeat your first boss', 'En racha': 'On a roll', 'Llegá a combo de 20': 'Reach a 20 combo',
+  'Veterano': 'Veteran', 'Intocable': 'Untouchable', '3 olas seguidas sin daño': '3 waves in a row without damage', 'Exterminador': 'Exterminator',
+  'Destruí 1000 enemigos en total': 'Destroy 1000 enemies in total', 'Cliente': 'Customer', 'Comprá tu primera mejora': 'Buy your first upgrade',
+  'Coleccionista': 'Collector', 'Desbloqueá todas las naves': 'Unlock all ships', 'Temerario': 'Daredevil', 'Rozá 50 balas en una partida': 'Graze 50 bullets in one run',
+  'Leyenda': 'Legend', 'Sumá 50.000 puntos en una partida': 'Score 50,000 points in one run', 'Explosivo': 'Explosive', 'Usá 3 bombas en una partida': 'Use 3 bombs in one run',
+  'HEXÁGONO': 'HEXAGON', 'ESPIRAL': 'SPIRAL', 'CORTINA': 'CURTAIN',
+  'MEJORAS': 'UPGRADES', 'NAVES': 'SHIPS', 'MISIONES': 'MISSIONS', 'LOGROS': 'TROPHIES', 'TIENDA': 'SHOP',
+  'ELEGIR': 'SELECT', '✔ EN USO': '✔ IN USE', '‹ Atrás': '‹ Back', '▶  JUGAR': '▶  PLAY', '🛒 TIENDA': '🛒 SHOP', '↻  REINTENTAR': '↻  RETRY',
+  '📋 Copiar puntaje': '📋 Copy score', '🎁 ABRIR COFRE SORPRESA': '🎁 OPEN MYSTERY CHEST', '▶ Otro cofre (ver anuncio)': '▶ Another chest (watch ad)',
+  '¡CASI!': 'SO CLOSE!', '¿Seguís jugando?': 'Keep playing?', '▶ REVIVIR (ver anuncio)': '▶ REVIVE (watch ad)', 'No, gracias': 'No, thanks',
+  'Cargando anuncio…': 'Loading ad…', 'PAUSA': 'PAUSED', 'P / toque para seguir': 'P / tap to resume', '¡NUEVO RÉCORD!': 'NEW RECORD!',
+  'Todavía no jugaste ninguna': "You haven't played yet", 'Tus 10 mejores partidas': 'Your 10 best runs',
+  'Se renuevan cada día · +100 ◆ por misión': 'Renew daily · +100 ◆ per mission', 'Volvé todos los días: la racha suma hasta +175 ◆': 'Come back daily: your streak adds up to +175 ◆',
+  'Munición pesada': 'Heavy ammo', '+25% de daño': '+25% damage', 'Cadencia': 'Fire rate', '+18% de velocidad de disparo': '+18% fire speed',
+  'Perforante': 'Piercing', 'Las balas atraviesan +1 enemigo': 'Bullets pierce +1 enemy', 'Disparo lateral': 'Side shots', '+2 balas en diagonal': '+2 diagonal bullets',
+  'Reparación': 'Repair', '+1 vida': '+1 life', 'Arsenal': 'Arsenal', '+1 bomba': '+1 bomb', 'Escudo de ola': 'Wave shield',
+  'Empezás cada ola con escudo': 'Start every wave with a shield', 'Súper imán': 'Super magnet', 'Las gemas te vienen de más lejos': 'Gems are pulled from farther away',
+  'Minero': 'Miner', 'Las gemas de la tienda valen doble': 'Shop gems are worth double', '+15% de velocidad de la nave': '+15% ship speed',
+  'Suerte': 'Luck', 'Caen más power-ups': 'More power-ups drop', 'Concentración': 'Focus', 'El combo dura más tiempo': 'Combo lasts longer',
+  'Escolta': 'Escort', 'Dos drones te acompañan siempre': 'Two drones always fly with you', 'Elegí una mejora para esta partida': 'Pick an upgrade for this run',
+  'Próxima: arma nivel 3': 'Next run: weapon level 3', 'Próxima: escudo + 2 bombas': 'Next run: shield + 2 bombs', 'Próxima: gemas x2': 'Next run: gems x2',
+  '🎁 Empezás con arma nivel 3': '🎁 Starting with weapon level 3', '🎁 Escudo + 2 bombas': '🎁 Shield + 2 bombs', '🎁 Gemas x2 esta partida': '🎁 Gems x2 this run',
+  '❤️ ¡Revivido!': '❤️ Revived!', '🎵 Música activada': '🎵 Music on', '🎵 Música apagada': '🎵 Music off',
+  'ARMA +1': 'WEAPON +1', 'ESCUDO': 'SHIELD', 'BOMBA': 'BOMB', 'VIDA +1': 'LIFE +1', 'CÁMARA LENTA': 'SLOW MOTION', 'LÁSER': 'LASER',
+  'IMÁN TOTAL': 'TOTAL MAGNET', 'IMÁN': 'MAGNET', 'LENTO': 'SLOW', '¡JEFE DERROTADO!': 'BOSS DEFEATED!',
+  'Disparás solo. Esquivá y recolectá.': 'Your ship fires automatically. Dodge and collect.', 'Multiplicador': 'Multiplier'
+};
+const PAT = [
+  [/^Ola (\d+)  ·  (\d+) enemigos  ·  combo máx\. (\d+)$/, m => `Wave ${m[1]}  ·  ${m[2]} enemies  ·  max combo ${m[3]}`],
+  [/^¡OLA (\d+) SUPERADA!$/, m => `WAVE ${m[1]} CLEARED!`], [/^OLA COMPLETADA \+(\d+)$/, m => `WAVE CLEARED +${m[1]}`],
+  [/^OLA (\d+)$/, m => `WAVE ${m[1]}`], [/^Ola (\d+)$/, m => `Wave ${m[1]}`], [/^MEJOR (\d+)$/, m => `BEST ${m[1]}`], [/^Récord: (\d+)$/, m => `Record: ${m[1]}`],
+  [/^Multiplicador x(\d)$/, m => `Multiplier x${m[1]}`], [/^\+(\d+) ◆ ganadas  \(total (\d+)\)$/, m => `+${m[1]} ◆ earned  (total ${m[2]})`],
+  [/^¡JEFE: (.+)!$/, m => `BOSS: ${L(m[1])}!`], [/^🔥 Racha de (\d+) día\(s\)  \+(\d+)◆$/, m => `🔥 ${m[1]}-day streak  +${m[2]}◆`],
+  [/^🔥 Racha: (\d+) día\(s\)  ·  bonus diario (\d+) ◆$/, m => `🔥 Streak: ${m[1]} day(s)  ·  daily bonus ${m[2]} ◆`],
+  [/^Misiones de hoy: (\d)\/3   ·   Racha: (\d+) 🔥$/, m => `Today's missions: ${m[1]}/3   ·   Streak: ${m[2]} 🔥`],
+  [/^(\d+)\/(\d+) logros  ·  \+50 ◆ cada uno$/, m => `${m[1]}/${m[2]} achievements  ·  +50 ◆ each`],
+  [/^✔ Misión: (.+)  \+100◆$/, m => `✔ Mission: ${L(m[1])}  +100◆`], [/^🏆 (.+)  \+50◆$/, m => `🏆 ${L(m[1])}  +50◆`],
+  [/^Te faltan (\d+) ◆$/, m => `You need ${m[1]} more ◆`], [/^🔒 (.+)$/, m => `🔒 ${L(m[1])}`],
+  [/^vel (\d+)%  ·  daño (\d+)%$/, m => `speed ${m[1]}%  ·  damage ${m[2]}%`], [/^🛒 TIENDA  ◆(\d+)$/, m => `🛒 SHOP  ◆${m[1]}`],
+  [/^(\S+) (Próxima: .+)$/, m => `${m[1]} ${L(m[2])}`], [/^(\S+) ¡JACKPOT! \+(\d+) ◆$/, m => `${m[1]} JACKPOT! +${m[2]} ◆`],
+  [/^Destruí (\d+) enemigos$/, m => `Destroy ${m[1]} enemies`], [/^Llegá a combo de (\d+)$/, m => `Reach a combo of ${m[1]}`],
+  [/^Llegá a la ola (\d+)$/, m => `Reach wave ${m[1]}`], [/^Juntá (\d+) gemas$/, m => `Collect ${m[1]} gems`],
+  [/^Derrotá (\d+) jefe\(s\)$/, m => `Defeat ${m[1]} boss(es)`], [/^Rozá (\d+) balas$/, m => `Graze ${m[1]} bullets`],
+  [/^Sumá (\d+) puntos en una partida$/, m => `Score ${m[1]} points in one run`]
+];
+const Lcache = {};
+function L(s) {
+  if (lang === 'es') return s;
+  if (Lcache[s] !== undefined) return Lcache[s];
+  let r = EN[s];
+  if (r === undefined) { r = s; for (const [re, f] of PAT) { const m = re.exec(s); if (m) { r = f(m); break; } } }
+  if (Object.keys(Lcache).length < 800) Lcache[s] = r;
+  return r;
+}
+function toggleLang() { lang = lang === 'es' ? 'en' : 'es'; store.set('lang', lang); SFX.ui(); }
 
 /* ---------- Audio (sintetizado, sin archivos) ---------- */
 let AC = null, muted = store.get('muted', false), shootTick = 0, adPause = false, sdkMute = false;
@@ -145,7 +213,7 @@ let achDone = store.get('ach', {});
 let stats = Object.assign({ kills: 0, bestWave: 0, bosses: 0 }, store.get('stats', {}));
 let topRuns = store.get('top', []);
 let toasts = [];
-function toast(s, col = '#ffe066') { toasts.push({ s, c: col, t: 190 }); }
+function toast(s, col = '#ffe066') { toasts.push({ s: L(s), c: col, t: 190 }); }
 
 const UPGRADES = [
   { k: 'life', n: 'Vidas extra', d: '+1 vida al empezar', max: 3, cost: l => [150, 350, 700][l] },
@@ -268,7 +336,7 @@ function startGame() {
   runGems = runGraze = runBombs = cleanWaves = earned = slowT = 0; hurtThisWave = false;
   spawnLeft = 0; spawnT = 0; waveDelay = 40; newRecord = false; ts = tsTarget = 1; shake = 0;
   mode = 'play'; SFX.ui();
-  mods = newMods(); chest = { st: 0, t: 0 }; gemMult = 1; revived = false;
+  mods = newMods(); chest = { st: 0, t: 0 }; gemMult = 1; revived = false; tutStart();
   const bo = store.get('boost', null);
   if (bo) {
     store.set('boost', null);
@@ -370,7 +438,7 @@ function killEnemy(e) {
 
 function useBomb() {
   if (mode !== 'play' || bombs <= 0) return;
-  bombs--; runBombs++; SFX.bomb(); vib(90); shake = 22; flash = .8;
+  bombs--; runBombs++; SFX.bomb(); vib(90); if (tut && tut.step === 2) tutEnd(); shake = 22; flash = .8;
   if (runBombs >= 3) ach('bombs3');
   ring(player.x, player.y, '#7df', 700); ring(player.x, player.y, '#fff', 500);
   ebullets.forEach(b => { burst(b.x, b.y, '#ffd', 2, 2, 14); gems.push({ x: b.x, y: b.y, vx: 0, vy: 0, r: 3 }); });
@@ -462,6 +530,7 @@ function step() {
   if (mods.drone) p.drones = Math.max(p.drones, 2);
   updatePlayer();
   if (slowT > 0) updatePlayer(); // compensa la cámara lenta: el jugador conserva su ritmo
+  if (tut) tutTick();
 
   // láser continuo
   if (p.laser > 0) {
@@ -611,6 +680,7 @@ function updateFx() {
 
 /* ---------- Dibujo ---------- */
 function txt(s, x, y, size = 18, col = '#fff', align = 'left', bold = false) {
+  s = L(String(s));
   ctx.font = (bold ? 'bold ' : '') + size + 'px system-ui,sans-serif'; ctx.textAlign = align; ctx.fillStyle = col; ctx.fillText(s, x, y);
 }
 function rr(x, y, w, h, r = 10) {
@@ -825,7 +895,7 @@ function drawShip() {
 
 function drawToasts() {
   if (!toasts.length) return;
-  const t = toasts[0], a = clamp(Math.min(t.t / 20, (190 - t.t) / 12), 0, 1), ty = mode === 'menu' ? 586 : 108;
+  const t = toasts[0], a = clamp(Math.min(t.t / 20, (190 - t.t) / 12), 0, 1), ty = mode === 'menu' ? 586 : mode === 'title' ? 56 : 108;
   ctx.globalAlpha = a; ctx.font = 'bold 15px system-ui,sans-serif';
   const w = ctx.measureText(t.s).width + 30;
   ctx.fillStyle = '#000d'; rr(W / 2 - w / 2, ty, w, 32, 16); ctx.fill();
@@ -839,7 +909,7 @@ function draw() {
   const hue = (wave * 37) % 360;
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, `hsl(${hue},55%,7%)`); g.addColorStop(1, `hsl(${(hue + 40) % 360},60%,14%)`);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.setTransform(K, 0, 0, K, 0, 0);
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   for (const s of stars) { ctx.fillStyle = `rgba(255,255,255,${.25 + s.v / 4.5})`; ctx.fillRect(s.x, s.y, s.s, s.s * (1 + s.v)); }
   if (mode === 'menu') { drawMenu(); drawToasts(); return; }
@@ -880,6 +950,7 @@ function draw() {
   if (mode === 'cards') drawCards();
   if (mode === 'revive') drawRevive();
   if (mode === 'ad') { ctx.fillStyle = '#000c'; ctx.fillRect(0, 0, W, H); txt('Cargando anuncio…', W / 2, H / 2, 20, '#fff', 'center', true); }
+  if (mode === 'play' && tut) drawTut();
   if (banner.t > 0 && mode === 'play') {
     ctx.globalAlpha = clamp(Math.min(1, banner.t / 30, (150 - banner.t) / 15 + .2), 0, 1);
     txt(banner.s, W / 2, 300, banner.s.length > 12 ? 34 : 44, '#fff', 'center', true);
@@ -890,7 +961,7 @@ function draw() {
   if (mode === 'paused') {
     ctx.fillStyle = '#000b'; ctx.fillRect(0, 0, W, H);
     txt('PAUSA', W / 2, H / 2 - 10, 46, '#fff', 'center', true);
-    txt('P / Esc / toque para seguir', W / 2, H / 2 + 26, 18, '#bcd', 'center');
+    txt('P / toque para seguir', W / 2, H / 2 + 26, 18, '#bcd', 'center');
   }
   if (mode === 'over') drawOver();
   drawToasts();
@@ -941,25 +1012,26 @@ function drawTitle() {
   if (best > 0) txt('Récord: ' + best, W / 2, 375, 18, '#ffe066', 'center', true);
   button(W / 2 - 110, 400, 220, 56, '▶  JUGAR', startGame, { bg: '#0d4a2a', border: '#7dff6a', size: 24 });
   button(W / 2 - 110, 470, 220, 46, '🛒 TIENDA  ◆' + bank, () => openMenu(0), { size: 18 });
+  button(W - 84, 12, 72, 30, '🌐 ' + (lang === 'es' ? 'ES' : 'EN'), toggleLang, { size: 13, border: '#888' });
+  txt(LT('Survive the waves · Beat the bosses · Collect gems', 'Sobreviví las olas · Vencé a los jefes · Juntá gemas'), W / 2, 548, 14, '#cde', 'center', true);
   const left = daily.list.filter(m => !m.done).length;
-  txt('Misiones de hoy: ' + (3 - left) + '/3   ·   Racha: ' + streak.n + ' 🔥', W / 2, 550, 15, left ? '#ffe066' : '#7dff6a', 'center', true);
-  const L = ['Mové: flechas / WASD / arrastrá el dedo', 'Bomba: ESPACIO o 💣  ·  Pausa: P  ·  Sonido: M  ·  Música: N',
-    'W arma · S escudo · B bomba · H vida', 'T lento · L láser · D drones · M imán'];
-  L.forEach((s, i) => txt(s, W / 2, 590 + i * 22, 13, '#9bb', 'center'));
+  txt('Misiones de hoy: ' + (3 - left) + '/3   ·   Racha: ' + streak.n + ' 🔥', W / 2, 578, 14, left ? '#ffe066' : '#7dff6a', 'center', true);
+  txt(LT('Move: arrows / WASD   ·   Bomb: SPACE   ·   Pause: P', 'Mové: flechas / WASD   ·   Bomba: ESPACIO   ·   Pausa: P'), W / 2, 628, 13, '#9bb', 'center');
+  txt(LT('Mobile: drag to move · tap 💣 for a bomb', 'Celular: arrastrá para mover · tocá 💣 para la bomba'), W / 2, 650, 13, '#9bb', 'center');
 }
 
 function drawOver() {
   const a = Math.min(1, overT / 40);
   ctx.fillStyle = `rgba(0,0,0,${.7 * a})`; ctx.fillRect(0, 0, W, H);
-  if (overT < 30) return;
+  if (overT < 15) return;
   txt('GAME OVER', W / 2, 190, 48, '#ff5c7a', 'center', true);
   txt(String(score), W / 2, 245, 40, '#fff', 'center', true);
   if (newRecord) txt('¡NUEVO RÉCORD!', W / 2, 280, 22, '#ffe066', 'center', true);
   else txt('Récord: ' + best, W / 2, 280, 18, '#9bb', 'center');
   txt(`Ola ${wave}  ·  ${kills} enemigos  ·  combo máx. ${maxCombo}`, W / 2, 312, 15, '#cde', 'center');
   txt('+' + earned + ' ◆ ganadas  (total ' + bank + ')', W / 2, 344, 20, '#6ff', 'center', true);
-  if (overT > 50) {
-    if (chest.st === 0) button(W / 2 - 120, 366, 240, 58, '🎁 ABRIR COFRE SORPRESA', openChest, { bg: '#4a3a0a', border: '#ffe066', size: 17 });
+  if (overT > 25) {
+    if (chest.st === 0) button(W / 2 - 120, 366, 240, 58, '🎁 ABRIR COFRE SORPRESA', openChest, { bg: '#4a3a0a', border: '#ffe066', size: 15 });
     else {
       ctx.fillStyle = '#4a3a0a'; rr(W / 2 - 120, 366, 240, 58); ctx.fill();
       ctx.strokeStyle = '#ffe066'; ctx.lineWidth = 3; rr(W / 2 - 120, 366, 240, 58); ctx.stroke();
@@ -978,7 +1050,7 @@ function retry() {
   else startGame();
 }
 function shareScore() {
-  const s = `Galaxy Rush: ${score} puntos, ola ${wave}, combo máx. ${maxCombo}. ¿Me superás?`;
+  const s = LT(`Galaxy Rush: ${score} points, wave ${wave}, max combo ${maxCombo}. Can you beat me?`, `Galaxy Rush: ${score} puntos, ola ${wave}, combo máx. ${maxCombo}. ¿Me superás?`);
   try { navigator.clipboard.writeText(s); toast('Puntaje copiado'); } catch { toast(s); }
 }
 
@@ -1017,7 +1089,7 @@ function openCards() {
 }
 function pickCard(i) {
   const cd = cardChoices[i]; if (!cd || mode !== 'cards') return;
-  cd.fn(); mode = 'play'; waveDelay = 50; SFX.power(); toast(cd.ic + ' ' + cd.n, cd.c);
+  cd.fn(); mode = 'play'; waveDelay = 50; SFX.power(); toast(cd.ic + ' ' + L(cd.n), cd.c);
 }
 function drawCards() {
   ctx.fillStyle = '#000b'; ctx.fillRect(0, 0, W, H);
@@ -1138,18 +1210,68 @@ function drawMenu() {
   button(14, 654, 80, 36, '‹ Atrás', () => { mode = 'title'; SFX.ui(); }, { size: 14, border: '#888' });
 }
 
+/* ---------- Tutorial (en el juego, visual y se puede saltar) ---------- */
+const TOUCH = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
+let usedKeys = false, tut = null;
+function tutStart() { tut = store.get('tut', false) ? null : { step: 0, t: 0, moved: 0, lx: player.x, ly: player.y }; }
+function tutEnd() { tut = null; store.set('tut', true); }
+const SKIP_BTN = { x: W / 2 - 90, y: 676, w: 180, h: 30 };
+function tutTick() {
+  const p = player; tut.t++; tut.moved += Math.abs(p.x - tut.lx) + Math.abs(p.y - tut.ly); tut.lx = p.x; tut.ly = p.y;
+  if (tut.step === 0 && (tut.moved > 260 || tut.t > 1200)) { tut.step = 1; tut.t = 0; }
+  else if (tut.step === 1 && tut.t > 330) { tut.step = 2; tut.t = 0; }
+  else if (tut.step === 2 && tut.t > 450) tutEnd();
+}
+function keycap(x, y, label, on) {
+  ctx.fillStyle = on ? '#4fd1ff' : '#1c2a4a'; rr(x - 22, y - 22, 44, 44, 8); ctx.fill();
+  ctx.strokeStyle = on ? '#fff' : '#89a'; ctx.lineWidth = 2; rr(x - 22, y - 22, 44, 44, 8); ctx.stroke();
+  txt(label, x, y + 8, 22, '#fff', 'center', true);
+}
+function pill(s, y, col = '#fff') {
+  ctx.font = 'bold 18px system-ui,sans-serif'; const w = ctx.measureText(L(s)).width + 36;
+  ctx.fillStyle = '#000b'; rr(W / 2 - w / 2, y - 24, w, 38, 19); ctx.fill();
+  txt(s, W / 2, y + 1, 18, col, 'center', true);
+}
+function drawTut() {
+  const pulse = .6 + .4 * Math.sin(time * .12), touchUI = TOUCH && !usedKeys;
+  if (tut.step === 0) {
+    pill(LT('Move your ship', 'Mové tu nave'), 520, '#ffe066');
+    if (touchUI) {
+      ctx.globalAlpha = pulse; txt('👆', W / 2 + Math.sin(time * .08) * 60, 612, 46, '#fff', 'center'); ctx.globalAlpha = 1;
+      pill(LT('Drag your finger', 'Arrastrá el dedo'), 648);
+    } else {
+      keycap(W / 2, 566, '↑', keys.ArrowUp || keys.w); keycap(W / 2 - 50, 616, '←', keys.ArrowLeft || keys.a);
+      keycap(W / 2, 616, '↓', keys.ArrowDown || keys.s); keycap(W / 2 + 50, 616, '→', keys.ArrowRight || keys.d);
+      txt(LT('or W A S D', 'o W A S D'), W / 2 + 90, 622, 14, '#cde', 'left');
+    }
+  } else if (tut.step === 1) {
+    pill(LT('Your ship fires automatically', 'Tu nave dispara sola'), 520);
+    pill(LT('Destroy enemies · collect 💎 and power-ups', 'Destruí enemigos · juntá 💎 y power-ups'), 566, '#6ff');
+  } else {
+    pill(touchUI ? LT('Tap 💣 for a bomb', 'Tocá 💣 para la bomba') : LT('Press SPACE for a bomb', 'Presioná ESPACIO para la bomba'), 520, '#ff9f43');
+    ctx.strokeStyle = '#ff9f43'; ctx.lineWidth = 3; ctx.globalAlpha = pulse; ctx.beginPath(); ctx.arc(BOMB_BTN.x, BOMB_BTN.y, BOMB_BTN.r + 8 + pulse * 5, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  const B = SKIP_BTN;
+  ctx.globalAlpha = .9; ctx.fillStyle = '#0009'; rr(B.x, B.y, B.w, B.h, 15); ctx.fill();
+  txt(LT('Skip tutorial ▸', 'Saltar tutorial ▸') + (touchUI ? '' : ' (Enter)'), B.x + B.w / 2, B.y + 20, 13, '#cde', 'center', true);
+  ctx.globalAlpha = 1;
+}
+
 /* ---------- Entrada ---------- */
 addEventListener('keydown', e => {
   initAudio();
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   keys[k] = true;
+  const mc = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd' }[e.code]; if (mc) { keys[mc] = true; usedKeys = true; }
+  if (e.key.startsWith('Arrow')) usedKeys = true;
+  if (mode === 'play' && tut && k === 'Enter') tutEnd();
   if ([' ', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) e.preventDefault();
   if (k === 'm') { muted = !muted; store.set('muted', muted); }
   if (k === 'n') { musicOn = !musicOn; store.set('music', musicOn); toast(musicOn ? '🎵 Música activada' : '🎵 Música apagada'); }
   if (mode === 'cards' && ['1', '2', '3'].includes(k)) pickCard(+k - 1);
-  if (mode === 'revive') { if (k === 'Enter') acceptRevive(); else if (k === 'Escape') gameOver(); }
+  if (mode === 'revive' && k === 'Enter') acceptRevive();
   if (mode === 'title') { if (k === 'Enter' || k === ' ') startGame(); else if (k === 't') openMenu(0); }
-  else if (mode === 'over') { if (overT > 50) { if (k === 'Enter' || k === ' ') retry(); else if (k === 't') openMenu(0); else if (k === 'c') openChest(); } }
+  else if (mode === 'over') { if (overT > 25) { if (k === 'Enter' || k === ' ') retry(); else if (k === 't') openMenu(0); else if (k === 'c') openChest(); } }
   else if (mode === 'menu') {
     if (k === 'ArrowRight') { tab = (tab + 1) % TABS.length; sel = 0; SFX.ui(); }
     else if (k === 'ArrowLeft') { tab = (tab + TABS.length - 1) % TABS.length; sel = 0; SFX.ui(); }
@@ -1157,12 +1279,11 @@ addEventListener('keydown', e => {
     else if (k === 'ArrowUp') { sel = Math.max(0, sel - 1); SFX.ui(); }
     else if (k === 'Enter') { const h = hits.find(h => h.item === sel); if (h) h.fn(); }
     else if (k === ' ') startGame();
-    else if (k === 'Escape') mode = 'title';
   }
   else if (mode === 'play' && (k === ' ' || k === 'b' || k === 'Shift')) useBomb();
-  if ((k === 'p' || k === 'Escape') && (mode === 'play' || mode === 'paused')) mode = mode === 'play' ? 'paused' : 'play';
+  if (k === 'p' && (mode === 'play' || mode === 'paused')) mode = mode === 'play' ? 'paused' : 'play';
 });
-addEventListener('keyup', e => { keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = false; });
+addEventListener('keyup', e => { keys[e.key.length === 1 ? e.key.toLowerCase() : e.key] = false; const mc = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd' }[e.code]; if (mc) keys[mc] = false; });
 addEventListener('blur', () => { if (mode === 'play') mode = 'paused'; for (const k in keys) keys[k] = false; });
 
 function toGame(e) { const r = c.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height }; }
@@ -1174,16 +1295,27 @@ c.addEventListener('pointerdown', e => {
     const h = hits.find(h => p.x >= h.x && p.x <= h.x + h.w && p.y >= h.y && p.y <= h.y + h.h);
     if (h) return h.fn();
     if (mode === 'title') return startGame();
-    if (mode === 'over' && overT > 50 && chest.st !== 1) return retry();
+    if (mode === 'over' && overT > 25 && chest.st !== 1) return retry();
     return;
   }
   if (mode === 'paused') { mode = 'play'; return; }
+  if (tut && p.x >= SKIP_BTN.x && p.x <= SKIP_BTN.x + SKIP_BTN.w && p.y >= SKIP_BTN.y && p.y <= SKIP_BTN.y + SKIP_BTN.h) return tutEnd();
   if (Math.hypot(p.x - BOMB_BTN.x, p.y - BOMB_BTN.y) < BOMB_BTN.r + 10) return useBomb();
   pointer.active = true; pointer.x = p.x; pointer.y = p.y;
 });
 c.addEventListener('pointermove', e => { if (pointer.active) { const p = toGame(e); pointer.x = p.x; pointer.y = p.y; } });
 const release = () => { pointer.active = false; };
 c.addEventListener('pointerup', release); c.addEventListener('pointercancel', release);
+
+/* ---------- Canvas nítido: resolución real según la pantalla ---------- */
+let K = 1;
+function fitCanvas() {
+  const cssH = Math.max(240, Math.min(innerHeight, innerWidth * 1.5)), cssW = cssH / 1.5;
+  c.style.height = cssH + 'px'; c.style.width = cssW + 'px';
+  const px = Math.min(1440, Math.round(cssH * Math.min(window.devicePixelRatio || 1, 2)));
+  c.width = Math.round(px / 1.5); c.height = px; K = px / H;
+}
+addEventListener('resize', fitCanvas); fitCanvas();
 
 /* ---------- Bucle (paso fijo a 60 Hz, independiente de la pantalla) ---------- */
 let last = performance.now(), acc = 0;
